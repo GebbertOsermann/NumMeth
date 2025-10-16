@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import numexpr as ne
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QTextEdit, QRadioButton, QButtonGroup)
@@ -18,8 +19,13 @@ class MainWindow(QWidget):
 		self.show()
 
 	def setUpWindow(self):
-		equation_label = QLabel("Equation: x * tanh(x)-1=0", self)
+		equation_label = QLabel("Equation:", self)
 		equation_label.move(20, 15)
+
+		self.equation_edit = QLineEdit(self)
+		self.equation_edit.setText("x*tanh(x)-1=0")
+		self.equation_edit.resize(140, 24)
+		self.equation_edit.move(80, 11)
 
 		borders_label = QLabel("Borders:", self)
 		borders_label.move(20, 45)
@@ -98,7 +104,7 @@ class MainWindow(QWidget):
 		y = self.f(x)
 
 		self.ax.clear()
-		self.ax.set_title("f(x) = x * tanh(x) - 1")
+		self.ax.set_title(f"f(x) = x*tanh(x)-1")
 		self.ax.grid(True)
 		self.ax.plot(x, y)
 		self.ax.axhline(0, color="black", linewidth=1.0)
@@ -106,12 +112,12 @@ class MainWindow(QWidget):
 		self.canvas.draw()
 
 	def f(self, x):
-		return x * np.tanh(x) - 1
+		return x*np.tanh(x)-1
 
 	def FindRoot(self):
 		root_intervals = self.ShorteningRootIntervals()
-		res1 = self.IterationMethod(root_intervals, self.precision)
-		res2 = self.DichotomyMethod(root_intervals, self.precision)
+		res1 = self.IterationMethod(root_intervals)
+		res2 = self.DichotomyMethod(root_intervals)
 		self.result_box.clear()
 		self.result_box.append(f"Intervals with roots: {root_intervals}")
 		self.result_box.append(f"\nRoots found using Iteration Method:\n{res1}")
@@ -149,25 +155,35 @@ class MainWindow(QWidget):
 
 		return [(round(l, 2), round(r, 2)) for (l, r) in current_intervals]
 
-	def IterationMethod(self, intervals, eps):
+	def IterationMethod(self, intervals):
 		roots = []
-		for (l, r) in intervals:
-			a1 = l
-			while a1 < r:
-				a2 = min(a1 + eps, r) #Using min() so it wouldn't go out of bonds
-				if self.f(a1) * self.f(a2) < 0: #Finds intervals on which sign changes
-					roots.append((a1 + a2) / 2) #Adds root to the list
-				elif self.f(a1) == 0:
-					roots.append(a1)
-				elif self.f(a2) == 0:
-					roots.append(a2)
-				a1 = a2
+		step = 0.01
+		while step >= self.precision:
+			new_intervals = []
+			current_roots = []
+			for (l, r) in intervals:
+				a1 = l
+				while a1 < r:
+					a2 = min(a1 + step, r)
+					if self.f(a1) * self.f(a2) < 0:
+						new_intervals.append((a1, a2))
+						current_roots.append((a1 + a2) / 2)
+					elif self.f(a1) == 0:
+						new_intervals.append((a1, a1))
+						current_roots.append((a1 + a1) / 2)
+					elif self.f(a2) == 0:
+						new_intervals.append((a2, a2))
+						current_roots.append((a2 + a2) / 2)
+					a1 = a2
+			intervals = new_intervals
+			roots = current_roots
+			step /= 10
 		return roots
 
-	def DichotomyMethod(self, intervals, eps):
+	def DichotomyMethod(self, intervals):
 		roots = []
 		for (l, r) in intervals:
-			while abs(r - l) > eps:
+			while abs(r - l) > self.precision:
 				c = (l + r) / 2 #Creates new point in the center of interval
 				if self.f(l) * self.f(c) < 0: #Finds which half contains root
 					r = c
