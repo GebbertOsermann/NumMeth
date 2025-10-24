@@ -3,7 +3,7 @@ import numpy as np
 import numexpr as ne
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QTextEdit, QRadioButton, QButtonGroup)
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMessageBox, QTextEdit, QRadioButton, QButtonGroup, QGroupBox, QGridLayout, QVBoxLayout, QHBoxLayout)
 
 class MainWindow(QWidget):
 
@@ -20,42 +20,32 @@ class MainWindow(QWidget):
 
 	def setUpWindow(self):
 		equation_label = QLabel("Equation:", self)
-		equation_label.move(20, 15)
 
 		self.equation_edit = QLineEdit(self)
 		self.equation_edit.setText("x*tanh(x)-1=0")
-		self.equation_edit.resize(140, 24)
-		self.equation_edit.move(80, 11)
 
 		borders_label = QLabel("Borders:", self)
-		borders_label.move(20, 45)
 
 		a_label = QLabel("a:", self)
-		a_label.move(20, 69)
 
 		self.a_edit = QLineEdit(self)
 		self.a_edit.setText("-2")
-		self.a_edit.resize(40, 24)
-		self.a_edit.move(34, 65)
 
 		b_label = QLabel("b:", self)
-		b_label.move(85, 69)
 
 		self.b_edit = QLineEdit(self)
 		self.b_edit.setText("2")
-		self.b_edit.resize(40, 24)
-		self.b_edit.move(99, 65)
 
-		eps_label = QLabel("Select Precision:", self)
-		eps_label.move(20, 95)
-
+		precision_box = QGroupBox("Select Precision:")
+		eps_layout = QVBoxLayout()
 		self.radio1 = QRadioButton("1e-4", self)
-		self.radio1.move(20, 115)
 		self.radio1.setChecked(True)
 		self.radio2 = QRadioButton("1e-6", self)
-		self.radio2.move(20, 135)
 		self.radio3 = QRadioButton("1e-8", self)
-		self.radio3.move(20, 155)
+		eps_layout.addWidget(self.radio1)
+		eps_layout.addWidget(self.radio2)
+		eps_layout.addWidget(self.radio3)
+		precision_box.setLayout(eps_layout)
 
 		self.radiogroup = QButtonGroup(self)
 		self.radiogroup.addButton(self.radio1)
@@ -65,30 +55,56 @@ class MainWindow(QWidget):
 		self.PrecisionChange()
 
 		self.buildGraph = QPushButton("Build Graph",self)
-		self.buildGraph.resize(345, 30)
-		self.buildGraph.move(20, 195)
 		self.buildGraph.clicked.connect(self.BuildGraph)
 
 		self.solveEquation = QPushButton("Solve Equation",self)
-		self.solveEquation.resize(345, 30)
-		self.solveEquation.move(20, 225)
 		self.solveEquation.clicked.connect(self.FindRoot)
 
 		result_label = QLabel("Results:", self)
-		result_label.move(20, 260)
 
 		self.result_box = QTextEdit(self)
 		self.result_box.setReadOnly(True)
-		self.result_box.resize(345, 236)
-		self.result_box.move(20, 280)
 		self.result_box.setPlaceholderText("Results will appear here...")
 
 		self.fig = Figure(figsize=(5, 5), dpi=100)
 		self.canvas = FigureCanvas(self.fig)
 		self.canvas.setParent(self)
-		self.canvas.move(386, 15)
 
 		self.ax = self.fig.add_subplot(111)
+
+		left_layout = QVBoxLayout()
+		eq_row = QHBoxLayout()
+		eq_row.addWidget(equation_label)
+		eq_row.addWidget(self.equation_edit)
+		left_layout.addLayout(eq_row)
+
+		borders_row = QHBoxLayout()
+		borders_row.addWidget(borders_label)
+		borders_row.addSpacing(6)
+		borders_row.addWidget(a_label)
+		borders_row.addWidget(self.a_edit)
+		borders_row.addSpacing(6)
+		borders_row.addWidget(b_label)
+		borders_row.addWidget(self.b_edit)
+		borders_row.addStretch()
+		left_layout.addLayout(borders_row)
+
+		left_layout.addSpacing(8)
+		left_layout.addWidget(self.buildGraph)
+		left_layout.addSpacing(6)
+		left_layout.addWidget(precision_box)
+		left_layout.addWidget(self.solveEquation)
+		left_layout.addWidget(result_label)
+		left_layout.addWidget(self.result_box)
+
+		left_container = QWidget()
+		left_container.setLayout(left_layout)
+		left_container.setMaximumWidth(320)
+
+		main_layout = QHBoxLayout()
+		main_layout.addWidget(left_container)
+		main_layout.addWidget(self.canvas, 1)
+		self.setLayout(main_layout)
 
 	def BuildGraph(self):
 		try:
@@ -114,15 +130,19 @@ class MainWindow(QWidget):
 	def f(self, x):
 		return x*np.tanh(x)-1
 
+	def derivative(self, x):
+		return (self.f(x + 1e-5) - self.f(x - 1e-5)) / (2 * (1e-5))
+
 	def FindRoot(self):
 		root_intervals = self.ShorteningRootIntervals()
 		res1 = self.IterationMethod(root_intervals)
 		res2 = self.DichotomyMethod(root_intervals)
+		res3 = self.NewtonsMethod(root_intervals)
 		self.result_box.clear()
 		self.result_box.append(f"Intervals with roots: {root_intervals}")
 		self.result_box.append(f"\nRoots found using Iteration Method:\n{res1}")
 		self.result_box.append(f"\nRoots found using Dichotomy Method:\n{res2}")
-		self.result_box.append(f"\nRoots found using Newton's Method:\nWIP")
+		self.result_box.append(f"\nRoots found using Newton's Method:\n{res3}")
 
 	def PrecisionChange(self):
 		if self.radio1.isChecked():
@@ -156,6 +176,7 @@ class MainWindow(QWidget):
 		return [(round(l, 2), round(r, 2)) for (l, r) in current_intervals]
 
 	def IterationMethod(self, intervals):
+		# digits = max(0, int(-np.log10(self.precision)))
 		roots = []
 		step = 0.01
 		while step >= self.precision:
@@ -168,12 +189,15 @@ class MainWindow(QWidget):
 					if self.f(a1) * self.f(a2) < 0:
 						new_intervals.append((a1, a2))
 						current_roots.append((a1 + a2) / 2)
+						# current_roots.append(round(((a1 + a2) / 2), digits))
 					elif self.f(a1) == 0:
 						new_intervals.append((a1, a1))
 						current_roots.append((a1 + a1) / 2)
+ 						# current_roots.append(round(((a1 + a1) / 2), digits))
 					elif self.f(a2) == 0:
 						new_intervals.append((a2, a2))
 						current_roots.append((a2 + a2) / 2)
+ 						# current_roots.append(round(((a2 + a2) / 2), digits))
 					a1 = a2
 			intervals = new_intervals
 			roots = current_roots
@@ -181,6 +205,7 @@ class MainWindow(QWidget):
 		return roots
 
 	def DichotomyMethod(self, intervals):
+		# digits = max(0, int(-np.log10(self.precision)))
 		roots = []
 		for (l, r) in intervals:
 			while abs(r - l) > self.precision:
@@ -190,11 +215,23 @@ class MainWindow(QWidget):
 				else:
 					l = c
 			roots.append((l + r) / 2)
+ 			# roots.append(round(((l + r) / 2), digits))
 		return roots
 
-
 	def NewtonsMethod(self, intervals):
+		# digits = max(0, int(-np.log10(self.precision)))
 		roots = []
+		for (l, r) in intervals:
+			x = l + self.precision
+			for i in range(50):
+				x_new = x - self.f(x) / self.derivative(x)
+				if abs(x_new - x) < self.precision or abs(self.f(x_new)) < self.precision:
+					x = x_new
+					break
+				x = x_new
+			roots.append(float(x))
+ 			# roots.append(round(float(x), digits))
+		return roots
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
